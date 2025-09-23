@@ -3,11 +3,13 @@
 
 #include <stdint.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #define usleep(x) Sleep((x)/1000)
 #define sleep(x) Sleep((x)*1000)
+#pragma pack(push, 1)
 #else
 #include <unistd.h>
 #endif
@@ -23,18 +25,30 @@
 // Fixed-size records with monotonic versioning
 typedef struct {
     uint64_t id;        // business key (0 = empty slot)
-    uint32_t version;   // monotonic per-record
+    atomic_uint version;   // monotonic per-record (atomic)
     int32_t  qty;
     float    price;
     char     padding[4]; // Ensure consistent layout
+#ifdef _WIN32
+} order_t;
+#else
 } __attribute__((packed)) order_t;
+#endif
 
 typedef struct {
     uint64_t id;        // business key (0 = empty slot)  
-    uint32_t version;   // monotonic per-record
+    atomic_uint version;   // monotonic per-record (atomic)
     char     name[32];
     char     padding[4]; // Alignment
+#ifdef _WIN32
+} user_t;
+#else
 } __attribute__((packed)) user_t;
+#endif
+
+#ifdef _WIN32
+#pragma pack(pop)
+#endif
 
 // Global shared arrays (defined in globals.c)
 extern order_t g_orders[ORDERS_CAP];

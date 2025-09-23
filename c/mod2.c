@@ -1,5 +1,3 @@
-#include <pthread.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
@@ -8,10 +6,26 @@
 #include "bus.h"
 #include "logging.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <process.h>
+typedef HANDLE thread_t;
+typedef unsigned int (__stdcall *thread_func_t)(void *);
+#define thread_create(thread, attr, start_routine, arg) \
+    ((*thread = (HANDLE)_beginthreadex(NULL, 0, (thread_func_t)start_routine, arg, 0, NULL)) != NULL ? 0 : -1)
+#define thread_join(thread, retval) (WaitForSingleObject(thread, INFINITE) == WAIT_OBJECT_0 ? 0 : -1)
+#else
+#include <pthread.h>
+#include <unistd.h>
+typedef pthread_t thread_t;
+#define thread_create pthread_create
+#define thread_join pthread_join
+#endif
+
 #define MODULE_NAME "C2"
 
-static pthread_t writer_thread;
-static pthread_t reader_thread;
+static thread_t writer_thread;
+static thread_t reader_thread;
 
 // Check if this module's writer is disabled via environment variable
 static int is_writer_disabled(void) {
@@ -38,12 +52,20 @@ static void generate_user_name(char *name_buf, size_t buf_size, int user_idx) {
 }
 
 // Writer thread - periodically updates users and publishes events
+#ifdef _WIN32
+unsigned int __stdcall c_mod2_writer_thread(void* arg) {
+#else
 void* c_mod2_writer_thread(void* arg) {
+#endif
     (void)arg;
     
     if (is_writer_disabled()) {
         LOG_INFO(MODULE_NAME, "writer disabled via C_WRITERS_DISABLED=1");
+#ifdef _WIN32
+        return 0;
+#else
         return NULL;
+#endif
     }
     
     LOG_INIT(MODULE_NAME, "starting user writer thread");
@@ -52,7 +74,11 @@ void* c_mod2_writer_thread(void* arg) {
     int sleep_us = is_high_frequency() ? 25000 : 200000; // 40Hz vs 5Hz (different timing than mod1)
     
     // Seed random number generator differently than mod1
+#ifdef _WIN32
+    srand((unsigned int)time(NULL) ^ GetCurrentThreadId() ^ 0x12345678);
+#else
     srand((unsigned int)time(NULL) ^ (uintptr_t)pthread_self() ^ 0x12345678);
+#endif
     
     while (atomic_load(&g_running)) {
         // Update user at round-robin index
@@ -86,7 +112,7 @@ void* c_mod2_writer_thread(void* arg) {
         
         // Log the write operation
         LOG_EVENT_SNAPSHOT(MODULE_NAME, TABLE_ID_USERS, idx, EV_OP_UPSERT, new_version,
-                          "id=%lu name=\"%s\"", user_id, name_buf);
+                          "id=%llu name=\"%s\"", user_id, name_buf);
         
         if (result == 1) {
             LOG_INFO(MODULE_NAME, "event dropped due to bus overflow");
@@ -97,11 +123,19 @@ void* c_mod2_writer_thread(void* arg) {
     }
     
     LOG_SHUTDOWN(MODULE_NAME, "user writer thread shutting down");
+#ifdef _WIN32
+    return 0;
+#else
     return NULL;
+#endif
 }
 
 // Reader thread - consumes events and logs read operations
+#ifdef _WIN32
+unsigned int __stdcall c_mod2_reader_thread(void* arg) {
+#else
 void* c_mod2_reader_thread(void* arg) {
+#endif
     (void)arg;
     
     LOG_INIT(MODULE_NAME, "starting event reader thread");
@@ -117,7 +151,7 @@ void* c_mod2_reader_thread(void* arg) {
                 
                 if (order.id != 0) {
                     LOG_EVENT_READ(MODULE_NAME, ev.table_id, ev.index, ev.op, ev.version,
-                                  "id=%lu qty=%d price=%.1f", order.id, order.qty, order.price);
+                                  "id=%llu qty=%d price=%.1f", order.id, order.qty, order.price);
                 }
             } else if (ev.table_id == TABLE_ID_USERS) {
                 // Read user data
@@ -127,7 +161,7 @@ void* c_mod2_reader_thread(void* arg) {
                     char name_buf[33];
                     safe_print_user_name(name_buf, sizeof(name_buf), user.name, sizeof(user.name));
                     LOG_EVENT_READ(MODULE_NAME, ev.table_id, ev.index, ev.op, ev.version,
-                                  "id=%lu name=\"%s\"", user.id, name_buf);
+                                  "id=%llu name=\"%s\"", user.id, name_buf);
                 }
             }
         }
@@ -137,7 +171,11 @@ void* c_mod2_reader_thread(void* arg) {
     }
     
     LOG_SHUTDOWN(MODULE_NAME, "event reader thread shutting down");
+#ifdef _WIN32
+    return 0;
+#else
     return NULL;
+#endif
 }
 
 // Initialize and start C Module 2 threads
@@ -145,13 +183,13 @@ int c_mod2_init(void) {
     LOG_INIT(MODULE_NAME, "initializing module threads");
     
     // Start writer thread
-    if (pthread_create(&writer_thread, NULL, c_mod2_writer_thread, NULL) != 0) {
+    if (thread_create(&writer_thread, NULL, c_mod2_writer_thread, NULL) != 0) {
         LOG_INFO(MODULE_NAME, "failed to create writer thread");
         return -1;
     }
     
     // Start reader thread
-    if (pthread_create(&reader_thread, NULL, c_mod2_reader_thread, NULL) != 0) {
+    if (thread_create(&reader_thread, NULL, c_mod2_reader_thread, NULL) != 0) {
         LOG_INFO(MODULE_NAME, "failed to create reader thread");
         return -1;
     }
@@ -164,8 +202,8 @@ void c_mod2_shutdown(void) {
     LOG_SHUTDOWN(MODULE_NAME, "initiating graceful shutdown");
     
     // Threads will exit when g_running becomes false
-    pthread_join(writer_thread, NULL);
-    pthread_join(reader_thread, NULL);
+    thread_join(writer_thread, NULL);
+    thread_join(reader_thread, NULL);
     
     LOG_SHUTDOWN(MODULE_NAME, "all threads stopped");
 }

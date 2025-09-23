@@ -2,31 +2,72 @@
 #define LOGGING_H
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <time.h>
 #include <stdlib.h>
 #include "event.h"
 
-// Consistent logging format: MODULE=<name> EVT table=<id> idx=<n> op=<op> ver=<v> SNAPSHOT <key>=<val> ...
+// Simplified logging for MSVC compatibility
+static inline void log_event_read(const char* module, int table_id, int index, int op, unsigned int version, const char* format, ...) {
+    printf("MODULE=%s EVT table=%d idx=%d op=%s ver=%u READ ", module, table_id, index, ev_op_to_string(op), version);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_EVENT_READ(module, table_id, index, op, version, ...) \
-    printf("MODULE=%s EVT table=%d idx=%d op=%s ver=%u READ " __VA_ARGS__ "\n", \
-           module, table_id, index, ev_op_to_string(op), version)
+static inline void log_event_snapshot(const char* module, int table_id, int index, int op, unsigned int version, const char* format, ...) {
+    printf("MODULE=%s EVT table=%d idx=%d op=%s ver=%u SNAPSHOT ", module, table_id, index, ev_op_to_string(op), version);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_EVENT_SNAPSHOT(module, table_id, index, op, version, ...) \
-    printf("MODULE=%s EVT table=%d idx=%d op=%s ver=%u SNAPSHOT " __VA_ARGS__ "\n", \
-           module, table_id, index, ev_op_to_string(op), version)
+static inline void log_info(const char* module, const char* format, ...) {
+    printf("MODULE=%s INFO ", module);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_INFO(module, ...) \
-    printf("MODULE=%s INFO " __VA_ARGS__ "\n", module)
+static inline void log_init(const char* module, const char* format, ...) {
+    printf("MODULE=%s INIT ", module);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_INIT(module, ...) \
-    printf("MODULE=%s INIT " __VA_ARGS__ "\n", module)
+static inline void log_shutdown(const char* module, const char* format, ...) {
+    printf("MODULE=%s SHUTDOWN ", module);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_SHUTDOWN(module, ...) \
-    printf("MODULE=%s SHUTDOWN " __VA_ARGS__ "\n", module)
+static inline void log_stats(const char* module, const char* format, ...) {
+    printf("MODULE=%s STATS ", module);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 
-#define LOG_STATS(module, ...) \
-    printf("MODULE=%s STATS " __VA_ARGS__ "\n", module)
+#define LOG_EVENT_READ log_event_read
+#define LOG_EVENT_SNAPSHOT log_event_snapshot
+#define LOG_INFO log_info
+#define LOG_INIT log_init
+#define LOG_SHUTDOWN log_shutdown
+#define LOG_STATS log_stats
 
 // Helper function to get current timestamp
 static inline double get_timestamp(void) {

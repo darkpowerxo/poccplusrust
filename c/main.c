@@ -6,6 +6,8 @@
 #include "bus.h"
 #include "logging.h"
 
+#define MODULE_NAME "MAIN"
+
 #ifdef _WIN32
 #include <windows.h>
 #include <conio.h>

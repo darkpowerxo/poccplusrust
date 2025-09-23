@@ -7,11 +7,20 @@ order_t g_orders[ORDERS_CAP];
 user_t  g_users[USERS_CAP];
 
 // Global runtime control
+#ifdef _WIN32
+atomic_bool g_running = {false};
+#else
 atomic_bool g_running = ATOMIC_VAR_INIT(false);
+#endif
 
 // Statistics tracking  
+#ifdef _WIN32
+atomic_uint g_events_published = {0};
+atomic_uint g_events_consumed = {0};
+#else
 atomic_uint g_events_published = ATOMIC_VAR_INIT(0);
 atomic_uint g_events_consumed = ATOMIC_VAR_INIT(0);
+#endif
 
 // Global event bus instance
 bus_t g_bus;
