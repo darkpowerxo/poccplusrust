@@ -30,9 +30,16 @@
 
 // Helper function to get current timestamp
 static inline double get_timestamp(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, counter;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&counter);
+    return (double)counter.QuadPart / (double)freq.QuadPart;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec / 1000000000.0;
+#endif
 }
 
 // Helper to format user name safely

@@ -4,6 +4,14 @@
 #include <stdint.h>
 #include <stdatomic.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#define usleep(x) Sleep((x)/1000)
+#define sleep(x) Sleep((x)*1000)
+#else
+#include <unistd.h>
+#endif
+
 // Table identifiers
 #define TABLE_ID_ORDERS 1
 #define TABLE_ID_USERS  2

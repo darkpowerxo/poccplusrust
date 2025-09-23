@@ -1,11 +1,25 @@
 #include <stdio.h>
 #include <signal.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
 #include "common.h"
 #include "bus.h"
 #include "logging.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <conio.h>
+// Windows doesn't have SIGTERM, use CTRL_C_EVENT
+static BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) {
+    (void)ctrl_type;
+    printf("\n"); // Clean up the ^C output
+    LOG_INFO(MODULE_NAME, "shutdown signal received");
+    atomic_store(&g_running, false);
+    return TRUE;
+}
+#else
+#include <unistd.h>
+#endif
 
 #define MODULE_NAME "MAIN"
 
@@ -24,12 +38,14 @@ extern void rust_module_init(void);
 extern void rust_module_shutdown(void);
 
 // Signal handler for graceful shutdown
+#ifndef _WIN32
 static void signal_handler(int sig) {
     (void)sig;
     printf("\n"); // Clean up the ^C output
     LOG_INFO(MODULE_NAME, "shutdown signal received");
     atomic_store(&g_running, false);
 }
+#endif
 
 // Print initial banner
 static void print_banner(void) {
@@ -93,8 +109,12 @@ int main(void) {
     print_banner();
     
     // Set up signal handlers for graceful shutdown
+#ifdef _WIN32
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+#else
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+#endif
     
     // Initialize global state
     print_init_messages();
